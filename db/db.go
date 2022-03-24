@@ -10,13 +10,14 @@ import (
 func ConvertByte(s string) []byte {
 	return []byte(s)
 }
-func ConvertString(b []byte) string{
+func ConvertString(b []byte) string {
 	return string(b)
 }
 
 type DatabaseManager struct {
 	db *bolt.DB
 }
+
 func UpdateDB(db *bolt.DB, bucket string, key string, value string) error {
 	err := db.Update(func(tx *bolt.Tx) error {
 		tx.CreateBucketIfNotExists([]byte("Paste"))
@@ -29,7 +30,7 @@ func UpdateDB(db *bolt.DB, bucket string, key string, value string) error {
 	})
 	return err
 }
-func GetDB(db *bolt.DB, bucket string, key string) ([]byte,error) {
+func GetDB(db *bolt.DB, bucket string, key string) ([]byte, error) {
 	var ans []byte
 	err := db.View(func(tx *bolt.Tx) error {
 		bucket := ConvertByte(bucket)
@@ -41,15 +42,46 @@ func GetDB(db *bolt.DB, bucket string, key string) ([]byte,error) {
 		}
 		return nil
 	})
-	return ans,err
+	return ans, err
 }
-func InitDB(connectDatabase string) *bolt.DB{
+func AsyncGetDB(db *bolt.DB, bucket string, key string) chan []byte {
+	ch := make(chan []byte)
+	go func() {
+		db.View(func(tx *bolt.Tx) error {
+			bucket := ConvertByte(bucket)
+			b := tx.Bucket(bucket)
+			key := ConvertByte(key)
+			ans := b.Get(key)
+			ch <- ans
+			return nil
+		})
+	}()
+	return ch
+}
+func AsyncUpdateDB(db *bolt.DB, bucket string, key string,value string) chan error {
+	ch := make(chan error)
+	go func() {
+		err := db.Update(func(tx *bolt.Tx) error {
+			tx.CreateBucketIfNotExists([]byte("Paste"))
+			bucket := ConvertByte(bucket)
+			b := tx.Bucket(bucket)
+			k := ConvertByte(key)
+			v := ConvertByte(value)
+			err := b.Put(k, v)
+			return err
+		})
+		ch<-err
+	}()
+	return ch
+}
+func InitDB(connectDatabase string) *bolt.DB {
 	db, err := bolt.Open(connectDatabase, 0777, nil)
 	if err != nil {
 		log.Fatal("Can't open database")
 	}
 	return db
 }
+
 // func main() {
 // 	db := InitDB("bolt.db")
 // 	// for i := 0; i < 10; i++ {

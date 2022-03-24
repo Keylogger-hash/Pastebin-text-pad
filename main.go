@@ -50,21 +50,23 @@ func GenerateUID() []byte {
 }
 
 // api handle
-func apiHandlePastGet(ctx *routing.Context) error {
+
+func apiAsyncHandlePasteGet(ctx *routing.Context) error {
 	ctx.SetContentType("text/plain")
 	key := ctx.Param("id")
 	db1 := db.InitDB("db/bolt.db")
 	defer db1.Close()
-	ans, err := db.GetDB(db1, "Paste", key)
-	if err != nil {
+	ans := <-db.AsyncGetDB(db1, "Paste", key)
+	if ans == nil {
+		ctx.SetStatusCode(fasthttp.StatusNotFound)
 		ctx.Write([]byte("Not found"))
-	} else {
-		ctx.Write([]byte(db.ConvertString(ans)))
+		return nil
 	}
-
+	ctx.SetStatusCode(fasthttp.StatusNotFound)
+	ctx.Write([]byte(db.ConvertString(ans)))
 	return nil
 }
-func apiHandlePastPost(ctx *routing.Context) error {
+func apiAsyncHandlePastePost(ctx *routing.Context) error{
 	body := ctx.PostBody()
 	paste := &PasteBody{}
 	err := json.Unmarshal(body, paste)
@@ -74,7 +76,7 @@ func apiHandlePastPost(ctx *routing.Context) error {
 	} else {
 		db1 := db.InitDB("db/bolt.db")
 		defer db1.Close()
-		err := db.UpdateDB(db1, "Paste", paste.ID, paste.Text)
+		err := <-db.AsyncUpdateDB(db1, "Paste", paste.ID, paste.Text)
 		if err != nil {
 			ctx.SetContentType("text/plain")
 			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
@@ -87,17 +89,19 @@ func apiHandlePastPost(ctx *routing.Context) error {
 	}
 	return nil
 }
+
 func handleIndex(ctx *routing.Context) error {
+
 	ctx.SetContentType("text/html")
 	tpl := template.Must(template.ParseFiles("public/templates/index.html"))
 
 	err := tpl.Execute(ctx, "index.html")
 	if err != nil {
 		ctx.Write([]byte("not found"))
-		return nil
-	} else {
-		return nil
+
 	}
+	return nil
+
 }
 
 func handlePaste(ctx *routing.Context) error {
@@ -111,17 +115,16 @@ func handlePaste(ctx *routing.Context) error {
 	}
 	db1 := db.InitDB("db/bolt.db")
 	defer db1.Close()
-	ans, err := db.GetDB(db1, "Paste", key)
-	if err != nil {
+	ans := <-db.AsyncGetDB(db1, "Paste", key)
+	if ans == nil {
 		ctx.SetContentType("text/plain")
 		ctx.SetStatusCode(fasthttp.StatusNotFound)
 		ctx.Write([]byte("404 Not found"))
 	} else {
 		ctx.SetContentType("text/html")
 		tpl := template.Must(template.ParseFiles("public/templates/paste.html"))
-		//ctx.Write([]byte(db.ConvertString(ans)))
-		paste := &PasteBody{Text:db.ConvertString(ans)}
-		err := tpl.Execute(ctx,paste)
+		paste := &PasteBody{Text: db.ConvertString(ans)}
+		err := tpl.Execute(ctx, paste)
 		if err != nil {
 			ctx.Write([]byte("not found"))
 			return nil
@@ -136,7 +139,7 @@ func handlePastePost(ctx *routing.Context) error {
 	db1 := db.InitDB("db/bolt.db")
 	defer db1.Close()
 	key := GenerateUID()
-	err := db.UpdateDB(db1, "Paste", db.ConvertString(key), db.ConvertString(text))
+	err := <-db.AsyncUpdateDB(db1, "Paste", db.ConvertString(key), db.ConvertString(text))
 	if err != nil {
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 		ctx.Write([]byte(fmt.Sprintf("Something went error: %v", err)))
@@ -151,8 +154,8 @@ func handlePastePost(ctx *routing.Context) error {
 func main() {
 	router := routing.New()
 	api := router.Group("/api")
-	api.Post("/paste", apiHandlePastPost)
-	api.Get("/paste/<id>", apiHandlePastGet)
+	api.Post("/paste", apiAsyncHandlePastePost)
+	api.Get("/paste/<id>", apiAsyncHandlePasteGet)
 	router.Get("/", handleIndex)
 	router.Post("/", handlePastePost)
 	// router.Get("/static/<path>",handleStatic)
@@ -161,4 +164,5 @@ func main() {
 	fmt.Println("Start server...")
 	fmt.Println("Listen tcp://localhost:8080")
 	fasthttp.ListenAndServe("localhost:8080", router.HandleRequest)
+
 }
