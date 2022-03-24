@@ -123,7 +123,7 @@ func handlePaste(ctx *routing.Context) error {
 	} else {
 		ctx.SetContentType("text/html")
 		tpl := template.Must(template.ParseFiles("public/templates/paste.html"))
-		paste := &PasteBody{Text: db.ConvertString(ans)}
+		paste := &PasteBody{ID:key,Text: db.ConvertString(ans)}
 		err := tpl.Execute(ctx, paste)
 		if err != nil {
 			ctx.Write([]byte("not found"))
@@ -155,10 +155,10 @@ func main() {
 	router := routing.New()
 	api := router.Group("/api")
 	api.Post("/paste", apiAsyncHandlePastePost)
-	api.Get("/paste/<id>", apiAsyncHandlePasteGet)
+	api.Get("/raw/<id>", apiAsyncHandlePasteGet)
 	router.Get("/", handleIndex)
 	router.Post("/", handlePastePost)
-	// router.Get("/static/<path>",handleStatic)
+	router.Get("/raw/<id>",apiAsyncHandlePasteGet)
 	router.Get("/<id>", handlePaste)
 
 	fmt.Println("Start server...")
