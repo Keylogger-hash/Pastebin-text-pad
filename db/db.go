@@ -1,6 +1,7 @@
 package db
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/boltdb/bolt"
@@ -18,6 +19,7 @@ type DatabaseManager struct {
 }
 func UpdateDB(db *bolt.DB, bucket string, key string, value string) error {
 	err := db.Update(func(tx *bolt.Tx) error {
+		tx.CreateBucketIfNotExists([]byte("Paste"))
 		bucket := ConvertByte(bucket)
 		b := tx.Bucket(bucket)
 		k := ConvertByte(key)
@@ -34,6 +36,9 @@ func GetDB(db *bolt.DB, bucket string, key string) ([]byte,error) {
 		b := tx.Bucket(bucket)
 		key := ConvertByte(key)
 		ans = b.Get(key)
+		if ans == nil {
+			return fmt.Errorf("Key is not exist")
+		}
 		return nil
 	})
 	return ans,err
