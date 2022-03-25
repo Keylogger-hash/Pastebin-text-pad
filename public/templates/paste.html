@@ -1,15 +1,18 @@
 <html>
     <head>
+
         <link rel="stylesheet" type="text/css" src="/static/css/base.css">
+        <meta charset="UTF-8" content="text/html">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        
+
+        <title>{{.ID}}</title>
     </head>
     <body >
         
         <div >
             <button>Copy from buffer</button>
             <a href="/raw/{{.ID}}">Raw</a>
-            <textarea name="text" id="id_text" style="height:80%;width:80%;display:flex;margin-top:40px;margin-left:auto;margin-right:auto;">{{.Text}}</textarea>
+            <textarea readonly name="text" accept-charset="UTF-8" id="id_text" style="height:80%;width:80%;display:flex;margin-top:40px;margin-left:auto;margin-right:auto;">{{.Text}}</textarea>
         </div>
         <script >
             function main(){

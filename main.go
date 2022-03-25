@@ -1,14 +1,16 @@
 package main
 
 import (
-	"encoding/json"
+	"encoding/hex"
 	"fmt"
 	"math/big"
+	"sync"
+
 
 	"html/template"
 
 	"crypto/rand"
-
+	"crypto/sha256"
 	"regexp"
 
 	routing "github.com/qiangxue/fasthttp-routing"
@@ -19,10 +21,12 @@ import (
 )
 
 type PasteBody struct {
-	ID   string
-	Text string
+	ID        string
+	Text      string
+	CSRFToken string
 }
 
+const secret string = "_`53=Aj#3tvUg`x.^2s`kk?M:un37MW7&v>Hv#*{T(=DAyEXA<C@PMQ&i*m~V&:+&`"
 const letters = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 func Validate(urlPath string) bool {
@@ -52,7 +56,6 @@ func GenerateUID() []byte {
 // api handle
 
 func apiAsyncHandlePasteGet(ctx *routing.Context) error {
-	ctx.SetContentType("text/plain")
 	key := ctx.Param("id")
 	db1 := db.InitDB("db/bolt.db")
 	defer db1.Close()
@@ -62,31 +65,9 @@ func apiAsyncHandlePasteGet(ctx *routing.Context) error {
 		ctx.Write([]byte("Not found"))
 		return nil
 	}
-	ctx.SetStatusCode(fasthttp.StatusNotFound)
+	ctx.SetStatusCode(fasthttp.StatusOK)
+	ctx.SetContentType("text/plain; charset=utf-8")
 	ctx.Write([]byte(db.ConvertString(ans)))
-	return nil
-}
-func apiAsyncHandlePastePost(ctx *routing.Context) error{
-	body := ctx.PostBody()
-	paste := &PasteBody{}
-	err := json.Unmarshal(body, paste)
-	if err != nil {
-		ctx.SetStatusCode(fasthttp.StatusBadRequest)
-		ctx.Write([]byte("Not valid json"))
-	} else {
-		db1 := db.InitDB("db/bolt.db")
-		defer db1.Close()
-		err := <-db.AsyncUpdateDB(db1, "Paste", paste.ID, paste.Text)
-		if err != nil {
-			ctx.SetContentType("text/plain")
-			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-			ctx.Write([]byte("Internal server error"))
-		} else {
-			ctx.SetContentType("text/plain")
-			ctx.SetStatusCode(fasthttp.StatusOK)
-			ctx.Write([]byte("success:true"))
-		}
-	}
 	return nil
 }
 
@@ -94,11 +75,22 @@ func handleIndex(ctx *routing.Context) error {
 
 	ctx.SetContentType("text/html")
 	tpl := template.Must(template.ParseFiles("public/templates/index.html"))
-
-	err := tpl.Execute(ctx, "index.html")
+	token := make(chan string,100)
+	go CSRFMiddlewareToken(token)
+	ans:= <- token
+	csrfcookie := hex.EncodeToString(ctx.Request.Header.Cookie("csrftoken"))
+	db1 := db.InitDB("db/bolt.db")
+	defer db1.Close()
+	err := <-db.AsyncUpdateDB(db1,"CSRF",csrfcookie,ans)
+	if err != nil {
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		ctx.Write([]byte("500 Internal server error"))
+		return err
+	}
+	paste := PasteBody{CSRFToken:ans}
+	err = tpl.Execute(ctx, paste)
 	if err != nil {
 		ctx.Write([]byte("not found"))
-
 	}
 	return nil
 
@@ -115,7 +107,15 @@ func handlePaste(ctx *routing.Context) error {
 	}
 	db1 := db.InitDB("db/bolt.db")
 	defer db1.Close()
+	csrfcookie := hex.EncodeToString(ctx.Request.Header.Cookie("csrftoken"))
+	validcsrf := <-db.AsyncGetDB(db1,"CSRF",csrfcookie)
+	if validcsrf == nil {
+		ctx.SetStatusCode(fasthttp.StatusForbidden)
+		ctx.Write([]byte("403 Forbidden"))
+		return nil
+	}
 	ans := <-db.AsyncGetDB(db1, "Paste", key)
+
 	if ans == nil {
 		ctx.SetContentType("text/plain")
 		ctx.SetStatusCode(fasthttp.StatusNotFound)
@@ -123,7 +123,7 @@ func handlePaste(ctx *routing.Context) error {
 	} else {
 		ctx.SetContentType("text/html")
 		tpl := template.Must(template.ParseFiles("public/templates/paste.html"))
-		paste := &PasteBody{ID:key,Text: db.ConvertString(ans)}
+		paste := &PasteBody{ID: key, Text: db.ConvertString(ans)}
 		err := tpl.Execute(ctx, paste)
 		if err != nil {
 			ctx.Write([]byte("not found"))
@@ -134,6 +134,7 @@ func handlePaste(ctx *routing.Context) error {
 	}
 	return nil
 }
+
 func handlePastePost(ctx *routing.Context) error {
 	text := ctx.FormValue("text")
 	db1 := db.InitDB("db/bolt.db")
@@ -151,14 +152,51 @@ func handlePastePost(ctx *routing.Context) error {
 	}
 	return nil
 }
+
+// Сгенерировать токен
+// Проверить токен
+// Если токен не валидный отправить 403
+// Иначе обработать форму
+
+func CSRFMiddlewareToken(token chan string) {
+	ch := make(chan []byte, 10)
+	ch1 := make(chan []byte,10)
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func(ch chan []byte) {
+		defer wg.Done()
+		uid := GenerateUID()
+		ch <- uid
+	}(ch)
+	wg.Add(1)
+	go func(ch chan []byte,ch1 chan []byte) {
+		defer wg.Done()
+		select {
+		case c := <-ch:
+			new := sha256.New()
+			decodeSecret,_ := hex.DecodeString(secret)
+			encodeByte := append(c,decodeSecret...)
+			new.Write(encodeByte)
+			ch1 <- new.Sum(nil)
+		}
+	}(ch,ch1)
+	wg.Add(1)
+	go func(ch1 chan []byte){
+		defer wg.Done()
+		select {
+		case c := <-ch1:
+			token<-hex.EncodeToString(c)
+		}
+	}(ch1)
+	wg.Wait()
+
+}
 func main() {
 	router := routing.New()
-	api := router.Group("/api")
-	api.Post("/paste", apiAsyncHandlePastePost)
-	api.Get("/raw/<id>", apiAsyncHandlePasteGet)
 	router.Get("/", handleIndex)
 	router.Post("/", handlePastePost)
-	router.Get("/raw/<id>",apiAsyncHandlePasteGet)
+	router.Get("/raw/<id>", apiAsyncHandlePasteGet)
 	router.Get("/<id>", handlePaste)
 
 	fmt.Println("Start server...")

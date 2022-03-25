@@ -8,9 +8,15 @@ import (
 )
 
 func ConvertByte(s string) []byte {
+	// b,err := hex.DecodeString(s)
+	// if err != nil {
+	// 	fmt.Println("Can't convert")
+	// 	return nil
+	// }
 	return []byte(s)
 }
 func ConvertString(b []byte) string {
+
 	return string(b)
 }
 
@@ -58,11 +64,11 @@ func AsyncGetDB(db *bolt.DB, bucket string, key string) chan []byte {
 	}()
 	return ch
 }
-func AsyncUpdateDB(db *bolt.DB, bucket string, key string,value string) chan error {
+func AsyncUpdateDB(db *bolt.DB, bucket string, key string, value string) chan error {
 	ch := make(chan error)
 	go func() {
 		err := db.Update(func(tx *bolt.Tx) error {
-			tx.CreateBucketIfNotExists([]byte("Paste"))
+			tx.CreateBucketIfNotExists([]byte(bucket))
 			bucket := ConvertByte(bucket)
 			b := tx.Bucket(bucket)
 			k := ConvertByte(key)
@@ -70,7 +76,7 @@ func AsyncUpdateDB(db *bolt.DB, bucket string, key string,value string) chan err
 			err := b.Put(k, v)
 			return err
 		})
-		ch<-err
+		ch <- err
 	}()
 	return ch
 }
