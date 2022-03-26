@@ -4,8 +4,8 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/big"
+	"os"
 	"sync"
-
 
 	"html/template"
 
@@ -192,8 +192,67 @@ func CSRFMiddlewareToken(token chan string) {
 	wg.Wait()
 
 }
+func handleStaticCSS(ctx *routing.Context) error{
+	path := ctx.Param("path")
+	path = "public/static/css/"+path
+	_, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err){
+			ctx.SetStatusCode(fasthttp.StatusNotFound)
+			ctx.Write([]byte("404 Not found"))
+		} else {
+			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+			ctx.Write([]byte("500 Internal server error"))
+		}
+	} else {
+		ctx.SetStatusCode(fasthttp.StatusOK)
+		ctx.SendFile(path)
+	}
+	return nil
+}
+func handleStaticJS(ctx *routing.Context) error{
+	path := ctx.Param("path")
+	path = "public/static/js/"+path
+	_, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err){
+			ctx.SetStatusCode(fasthttp.StatusNotFound)
+			ctx.Write([]byte("404 Not found"))
+		} else {
+			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+			ctx.Write([]byte("500 Internal server error"))
+		}
+	} else {
+		ctx.SetStatusCode(fasthttp.StatusOK)
+		ctx.SendFile(path)
+	}
+	return nil
+}
+func handleStaticImages(ctx *routing.Context) error{
+	path := ctx.Param("path")
+	path = "public/static/images/"+path
+	_, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err){
+			ctx.SetStatusCode(fasthttp.StatusNotFound)
+			ctx.Write([]byte("404 Not found"))
+		} else {
+			ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+			ctx.Write([]byte("500 Internal server error"))
+		}
+	} else {
+		ctx.SetStatusCode(fasthttp.StatusOK)
+		ctx.SendFile(path)
+	}
+	return nil
+}
 func main() {
 	router := routing.New()
+	static := router.Group("/static")
+	
+	static.Get("/css/<path>",handleStaticCSS)
+	static.Get("/js/<path>",handleStaticJS)
+	static.Get("/images/<path>",handleStaticImages)
 	router.Get("/", handleIndex)
 	router.Post("/", handlePastePost)
 	router.Get("/raw/<id>", apiAsyncHandlePasteGet)

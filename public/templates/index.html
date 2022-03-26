@@ -1,15 +1,17 @@
 <html>
     <head>
-        <link rel="stylesheet" type="text/css" src="/static/css/base.css">
+        <link rel="stylesheet" href="/static/css/base.css" />
+        <link rel="icon" type="image/x-icon" href="/static/images/pastebin-favicon.ico">
+
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <meta charset="UTF-8">
     </head>
     <body >
         <div >
             <form action="" method="POST" enctype="application/x-www-form-urlencoded">
-                <textarea name="text" id="id_text" style="height:80%;width:80%;display:flex;margin-top:40px;margin-left:auto;margin-right:auto;"></textarea>
+                <textarea name="text" id="id_text" style=""></textarea>
                 <input type="hidden" name="csrftoken" value="{{.CSRFToken}}">
-                <button style="font-size:20px;display:block; margin-top:40px;margin-right: 10%;margin-left:auto;">Create New Paste</button>    
+                <button>Create New Paste</button>    
             </form>
         </div>
     </body>
