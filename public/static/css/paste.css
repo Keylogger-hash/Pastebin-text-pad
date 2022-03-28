@@ -6,3 +6,10 @@ textarea {
     margin-left:auto;
     margin-right:auto;
 }
+
+#inner-button {
+    margin-left:75%;
+}
+#edit-hidden {
+    margin-left:75%;
+}

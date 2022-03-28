@@ -246,6 +246,22 @@ func handleStaticImages(ctx *routing.Context) error{
 	}
 	return nil
 }
+func handleEditPaste(ctx *routing.Context) error{
+	key := ctx.Param("id")
+	text := ctx.FormValue("text")
+	fmt.Println(db.ConvertString(text))
+	db1 := db.InitDB("db/bolt.db")
+	defer db1.Close()
+	err := <-db.AsyncUpdateDB(db1,"Paste",key, db.ConvertString(text))
+	if err != nil {
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		fmt.Println(err)
+		ctx.Write([]byte("500 Status Internal Server Error"))
+	} else {
+		ctx.Redirect("/"+key,fasthttp.StatusOK)
+	}
+	return nil
+}
 func main() {
 	router := routing.New()
 	static := router.Group("/static")
@@ -254,10 +270,10 @@ func main() {
 	static.Get("/js/<path>",handleStaticJS)
 	static.Get("/images/<path>",handleStaticImages)
 	router.Get("/", handleIndex)
-	router.Post("/", handlePastePost)
 	router.Get("/raw/<id>", apiAsyncHandlePasteGet)
 	router.Get("/<id>", handlePaste)
-
+	router.Post("/<id>",handleEditPaste)
+	router.Post("/", handlePastePost)
 	fmt.Println("Start server...")
 	fmt.Println("Listen tcp://localhost:8080")
 	fasthttp.ListenAndServe("localhost:8080", router.HandleRequest)

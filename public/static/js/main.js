@@ -1,3 +1,10 @@
+var button = document.querySelector("#edit-button")
+button.onclick = function(){
+    var textarea = document.querySelector("textarea");
+    document.getElementById("edit-hidden").type='submit';
+    textarea.readOnly = false;
+    
+}
 function main(){
     var button = document.querySelector("button");
     var textarea = document.querySelector("textarea");

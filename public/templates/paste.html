@@ -8,13 +8,18 @@
 
         <title>{{.ID}}</title>
     </head>
+    
     <body >
-        
-        <div >
+
+        <div id="inner-button">
             <button>Copy from buffer</button>
-            <a href="/raw/{{.ID}}">Raw</a>
-            <textarea readonly name="text" accept-charset="UTF-8" id="id_text" >{{.Text}}</textarea>
+            <button onclick="window.location.href='/raw/{{.ID}}'">Raw</button>
+            <button id="edit-button">Edit</button>
         </div>
+        <form action="/{{.ID}}" method="POST" enctype="application/x-www-form-urlencoded">
+            <textarea readonly name="text" accept-charset="UTF-8" id="id_text" >{{.Text}}</textarea>
+            <input id="edit-hidden" type="hidden" value="Edit paste">
+        </form>
         <script type="text/javascript" src="/static/js/main.js"></script>
     </body>
 </html>
