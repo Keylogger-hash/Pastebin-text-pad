@@ -3,6 +3,8 @@ button.onclick = function(){
     var textarea = document.querySelector("textarea");
     document.getElementById("edit-hidden").type='submit';
     textarea.readOnly = false;
+    alert("Now you can edit document")
+    textarea.style.border = "solid 10px orange;"
     
 }
 function main(){

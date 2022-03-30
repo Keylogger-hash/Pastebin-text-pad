@@ -1,15 +1,21 @@
 textarea {
-    height:80%;
-    width:80%;
+    height:60%;
+    width:60%;
     display:flex;
+    font-size:18px;
     margin-top:40px;
     margin-left:auto;
     margin-right:auto;
 }
-button {
+#inner-button {
+    margin-left:63%;
+    margin-top:10px;
+    display:inline-block; 
+    /* margin-top:40px;
+    margin-right: 20%;
+    margin-left:auto; */
+}
+button{
     font-size:20px;
-    display:block; 
-    margin-top:40px;
-    margin-right: 10%;
-    margin-left:auto;
+
 }

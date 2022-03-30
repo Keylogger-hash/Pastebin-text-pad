@@ -75,20 +75,9 @@ func handleIndex(ctx *routing.Context) error {
 
 	ctx.SetContentType("text/html")
 	tpl := template.Must(template.ParseFiles("public/templates/index.html"))
-	token := make(chan string,100)
-	go CSRFMiddlewareToken(token)
-	ans:= <- token
-	csrfcookie := hex.EncodeToString(ctx.Request.Header.Cookie("csrftoken"))
-	db1 := db.InitDB("db/bolt.db")
-	defer db1.Close()
-	err := <-db.AsyncUpdateDB(db1,"CSRF",csrfcookie,ans)
-	if err != nil {
-		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-		ctx.Write([]byte("500 Internal server error"))
-		return err
-	}
-	paste := PasteBody{CSRFToken:ans}
-	err = tpl.Execute(ctx, paste)
+
+	paste := PasteBody{}
+	err := tpl.Execute(ctx, paste)
 	if err != nil {
 		ctx.Write([]byte("not found"))
 	}
@@ -107,13 +96,6 @@ func handlePaste(ctx *routing.Context) error {
 	}
 	db1 := db.InitDB("db/bolt.db")
 	defer db1.Close()
-	csrfcookie := hex.EncodeToString(ctx.Request.Header.Cookie("csrftoken"))
-	validcsrf := <-db.AsyncGetDB(db1,"CSRF",csrfcookie)
-	if validcsrf == nil {
-		ctx.SetStatusCode(fasthttp.StatusForbidden)
-		ctx.Write([]byte("403 Forbidden"))
-		return nil
-	}
 	ans := <-db.AsyncGetDB(db1, "Paste", key)
 
 	if ans == nil {
@@ -137,6 +119,10 @@ func handlePaste(ctx *routing.Context) error {
 
 func handlePastePost(ctx *routing.Context) error {
 	text := ctx.FormValue("text")
+	if text == nil {
+		ctx.SetStatusCode(fasthttp.StatusBadRequest)
+		ctx.Write([]byte("400 Bad request"))
+	}
 	db1 := db.InitDB("db/bolt.db")
 	defer db1.Close()
 	key := GenerateUID()
@@ -144,11 +130,11 @@ func handlePastePost(ctx *routing.Context) error {
 	if err != nil {
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 		ctx.Write([]byte(fmt.Sprintf("Something went error: %v", err)))
+		return nil
 	} else {
 		ctx.SetStatusCode(fasthttp.StatusOK)
 		pathRedirect := "/" + db.ConvertString(key)
 		ctx.Redirect(pathRedirect, fasthttp.StatusFound)
-
 	}
 	return nil
 }
@@ -160,7 +146,7 @@ func handlePastePost(ctx *routing.Context) error {
 
 func CSRFMiddlewareToken(token chan string) {
 	ch := make(chan []byte, 10)
-	ch1 := make(chan []byte,10)
+	ch1 := make(chan []byte, 10)
 	var wg sync.WaitGroup
 
 	wg.Add(1)
@@ -170,34 +156,34 @@ func CSRFMiddlewareToken(token chan string) {
 		ch <- uid
 	}(ch)
 	wg.Add(1)
-	go func(ch chan []byte,ch1 chan []byte) {
+	go func(ch chan []byte, ch1 chan []byte) {
 		defer wg.Done()
 		select {
 		case c := <-ch:
 			new := sha256.New()
-			decodeSecret,_ := hex.DecodeString(secret)
-			encodeByte := append(c,decodeSecret...)
+			decodeSecret, _ := hex.DecodeString(secret)
+			encodeByte := append(c, decodeSecret...)
 			new.Write(encodeByte)
 			ch1 <- new.Sum(nil)
 		}
-	}(ch,ch1)
+	}(ch, ch1)
 	wg.Add(1)
-	go func(ch1 chan []byte){
+	go func(ch1 chan []byte) {
 		defer wg.Done()
 		select {
 		case c := <-ch1:
-			token<-hex.EncodeToString(c)
+			token <- hex.EncodeToString(c)
 		}
 	}(ch1)
 	wg.Wait()
 
 }
-func handleStaticCSS(ctx *routing.Context) error{
+func handleStaticCSS(ctx *routing.Context) error {
 	path := ctx.Param("path")
-	path = "public/static/css/"+path
+	path = "public/static/css/" + path
 	_, err := os.Stat(path)
 	if err != nil {
-		if os.IsNotExist(err){
+		if os.IsNotExist(err) {
 			ctx.SetStatusCode(fasthttp.StatusNotFound)
 			ctx.Write([]byte("404 Not found"))
 		} else {
@@ -210,12 +196,12 @@ func handleStaticCSS(ctx *routing.Context) error{
 	}
 	return nil
 }
-func handleStaticJS(ctx *routing.Context) error{
+func handleStaticJS(ctx *routing.Context) error {
 	path := ctx.Param("path")
-	path = "public/static/js/"+path
+	path = "public/static/js/" + path
 	_, err := os.Stat(path)
 	if err != nil {
-		if os.IsNotExist(err){
+		if os.IsNotExist(err) {
 			ctx.SetStatusCode(fasthttp.StatusNotFound)
 			ctx.Write([]byte("404 Not found"))
 		} else {
@@ -228,12 +214,12 @@ func handleStaticJS(ctx *routing.Context) error{
 	}
 	return nil
 }
-func handleStaticImages(ctx *routing.Context) error{
+func handleStaticImages(ctx *routing.Context) error {
 	path := ctx.Param("path")
-	path = "public/static/images/"+path
+	path = "public/static/images/" + path
 	_, err := os.Stat(path)
 	if err != nil {
-		if os.IsNotExist(err){
+		if os.IsNotExist(err) {
 			ctx.SetStatusCode(fasthttp.StatusNotFound)
 			ctx.Write([]byte("404 Not found"))
 		} else {
@@ -246,34 +232,32 @@ func handleStaticImages(ctx *routing.Context) error{
 	}
 	return nil
 }
-func handleEditPaste(ctx *routing.Context) error{
+func handleEditPaste(ctx *routing.Context) error {
 	key := ctx.Param("id")
 	text := ctx.FormValue("text")
-	fmt.Println(db.ConvertString(text))
 	db1 := db.InitDB("db/bolt.db")
 	defer db1.Close()
-	err := <-db.AsyncUpdateDB(db1,"Paste",key, db.ConvertString(text))
+	err := <-db.AsyncUpdateDB(db1, "Paste", key, db.ConvertString(text))
 	if err != nil {
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-		fmt.Println(err)
 		ctx.Write([]byte("500 Status Internal Server Error"))
 	} else {
-		ctx.Redirect("/"+key,fasthttp.StatusOK)
+		ctx.Redirect("/"+key, fasthttp.StatusOK)
 	}
 	return nil
 }
 func main() {
 	router := routing.New()
 	static := router.Group("/static")
-	
-	static.Get("/css/<path>",handleStaticCSS)
-	static.Get("/js/<path>",handleStaticJS)
-	static.Get("/images/<path>",handleStaticImages)
+
+	static.Get("/css/<path>", handleStaticCSS)
+	static.Get("/js/<path>", handleStaticJS)
+	static.Get("/images/<path>", handleStaticImages)
 	router.Get("/", handleIndex)
+	router.Post("/", handlePastePost)
 	router.Get("/raw/<id>", apiAsyncHandlePasteGet)
 	router.Get("/<id>", handlePaste)
-	router.Post("/<id>",handleEditPaste)
-	router.Post("/", handlePastePost)
+	router.Post("/<id>", handleEditPaste)
 	fmt.Println("Start server...")
 	fmt.Println("Listen tcp://localhost:8080")
 	fasthttp.ListenAndServe("localhost:8080", router.HandleRequest)
