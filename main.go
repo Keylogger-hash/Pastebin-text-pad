@@ -1,16 +1,13 @@
 package main
 
 import (
-	"encoding/hex"
 	"fmt"
 	"math/big"
 	"os"
-	"sync"
 
 	"html/template"
 
 	"crypto/rand"
-	"crypto/sha256"
 	"regexp"
 
 	routing "github.com/qiangxue/fasthttp-routing"
@@ -75,8 +72,13 @@ func handleIndex(ctx *routing.Context) error {
 
 	ctx.SetContentType("text/html")
 	tpl := template.Must(template.ParseFiles("public/templates/index.html"))
-
-	paste := PasteBody{}
+	uid := GenerateUID()
+	cookie := fasthttp.Cookie{}
+	cookieStringValue := string(uid)
+	cookie.SetKey("csrftoken")
+	cookie.SetValue(cookieStringValue)
+	ctx.Response.Header.SetCookie(&cookie)
+	paste := &PasteBody{CSRFToken: cookieStringValue}
 	err := tpl.Execute(ctx, paste)
 	if err != nil {
 		ctx.Write([]byte("not found"))
@@ -104,8 +106,14 @@ func handlePaste(ctx *routing.Context) error {
 		ctx.Write([]byte("404 Not found"))
 	} else {
 		ctx.SetContentType("text/html")
+		uid := GenerateUID()
+		uidString := db.ConvertString(uid)
+		cookie := fasthttp.Cookie{}
+		cookie.SetKey("csrftoken")
+		cookie.SetValue(uidString)
+		ctx.Response.Header.SetCookie(&cookie)
 		tpl := template.Must(template.ParseFiles("public/templates/paste.html"))
-		paste := &PasteBody{ID: key, Text: db.ConvertString(ans)}
+		paste := &PasteBody{ID: key, Text: db.ConvertString(ans),CSRFToken: uidString}
 		err := tpl.Execute(ctx, paste)
 		if err != nil {
 			ctx.Write([]byte("not found"))
@@ -119,10 +127,17 @@ func handlePaste(ctx *routing.Context) error {
 
 func handlePastePost(ctx *routing.Context) error {
 	text := ctx.FormValue("text")
+	csrftokenInputField := db.ConvertString(ctx.FormValue("csrftoken"))
+	csrftoken := db.ConvertString(ctx.Request.Header.Cookie("csrftoken"))
+	if csrftokenInputField != csrftoken {
+		ctx.SetStatusCode(fasthttp.StatusForbidden)
+		ctx.Write([]byte("403 CSRF forbidden"))
+	}
 	if text == nil {
 		ctx.SetStatusCode(fasthttp.StatusBadRequest)
 		ctx.Write([]byte("400 Bad request"))
 	}
+
 	db1 := db.InitDB("db/bolt.db")
 	defer db1.Close()
 	key := GenerateUID()
@@ -138,46 +153,36 @@ func handlePastePost(ctx *routing.Context) error {
 	}
 	return nil
 }
-
-// Сгенерировать токен
-// Проверить токен
-// Если токен не валидный отправить 403
-// Иначе обработать форму
-
-func CSRFMiddlewareToken(token chan string) {
-	ch := make(chan []byte, 10)
-	ch1 := make(chan []byte, 10)
-	var wg sync.WaitGroup
-
-	wg.Add(1)
-	go func(ch chan []byte) {
-		defer wg.Done()
-		uid := GenerateUID()
-		ch <- uid
-	}(ch)
-	wg.Add(1)
-	go func(ch chan []byte, ch1 chan []byte) {
-		defer wg.Done()
-		select {
-		case c := <-ch:
-			new := sha256.New()
-			decodeSecret, _ := hex.DecodeString(secret)
-			encodeByte := append(c, decodeSecret...)
-			new.Write(encodeByte)
-			ch1 <- new.Sum(nil)
-		}
-	}(ch, ch1)
-	wg.Add(1)
-	go func(ch1 chan []byte) {
-		defer wg.Done()
-		select {
-		case c := <-ch1:
-			token <- hex.EncodeToString(c)
-		}
-	}(ch1)
-	wg.Wait()
-
+func handleEditPaste(ctx *routing.Context) error {
+	key := ctx.Param("id")
+	text := ctx.FormValue("text")
+	csrftokenInputField := db.ConvertString(ctx.FormValue("csrftoken"))
+	csrftoken := db.ConvertString(ctx.Request.Header.Cookie("csrftoken"))
+	fmt.Println(csrftokenInputField==csrftoken)
+	if text == nil {
+		ctx.SetStatusCode(fasthttp.StatusBadRequest)
+		ctx.Write([]byte("400 Bad request"))
+		return nil
+	}
+	
+	if csrftokenInputField != csrftoken  {
+		ctx.SetStatusCode(fasthttp.StatusForbidden)
+		ctx.Write([]byte("403 CSRF forbidden"))
+		return nil
+	}
+	db1 := db.InitDB("db/bolt.db")
+	defer db1.Close()
+	err := <-db.AsyncUpdateDB(db1, "Paste", key, db.ConvertString(text))
+	if err != nil {
+		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
+		ctx.Write([]byte("500 Status Internal Server Error"))
+	} else {
+		ctx.Redirect("/"+key, fasthttp.StatusOK)
+	}
+	return nil
 }
+
+
 func handleStaticCSS(ctx *routing.Context) error {
 	path := ctx.Param("path")
 	path = "public/static/css/" + path
@@ -232,20 +237,8 @@ func handleStaticImages(ctx *routing.Context) error {
 	}
 	return nil
 }
-func handleEditPaste(ctx *routing.Context) error {
-	key := ctx.Param("id")
-	text := ctx.FormValue("text")
-	db1 := db.InitDB("db/bolt.db")
-	defer db1.Close()
-	err := <-db.AsyncUpdateDB(db1, "Paste", key, db.ConvertString(text))
-	if err != nil {
-		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
-		ctx.Write([]byte("500 Status Internal Server Error"))
-	} else {
-		ctx.Redirect("/"+key, fasthttp.StatusOK)
-	}
-	return nil
-}
+
+
 func main() {
 	router := routing.New()
 	static := router.Group("/static")

@@ -18,6 +18,7 @@
         </div>
         <form action="/{{.ID}}" method="POST" enctype="application/x-www-form-urlencoded">
             <textarea readonly required name="text" accept-charset="UTF-8" id="id_text" >{{.Text}}</textarea>
+            <input name="csrftoken" type="hidden" value="{{.CSRFToken}}">
             <input id="edit-hidden" type="hidden" value="Edit paste">
         </form>
         <script type="text/javascript" src="/static/js/main.js"></script>
