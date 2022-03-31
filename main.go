@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"runtime"
 
 	"html/template"
 
@@ -32,7 +33,7 @@ func apiAsyncHandlePasteGet(ctx *routing.Context) error {
 	key := ctx.Param("id")
 	db1 := db.InitDB("db/bolt.db")
 	defer db1.Close()
-	ans := <-db.AsyncGetDB(db1, "Paste", key)
+	ans := <-db.AsyncGetDB(db1, "Paste", db.ConvertByte(key))
 	if ans == nil {
 		ctx.SetStatusCode(fasthttp.StatusNotFound)
 		ctx.Write([]byte("Not found"))
@@ -74,7 +75,7 @@ func handlePaste(ctx *routing.Context) error {
 	}
 	db1 := db.InitDB("db/bolt.db")
 	defer db1.Close()
-	ans := <-db.AsyncGetDB(db1, "Paste", key)
+	ans := <-db.AsyncGetDB(db1, "Paste", db.ConvertByte(key))
 
 	if ans == nil {
 		ctx.SetContentType("text/plain")
@@ -117,7 +118,7 @@ func handlePastePost(ctx *routing.Context) error {
 	db1 := db.InitDB("db/bolt.db")
 	defer db1.Close()
 	key := utils.GenerateUID()
-	err := <-db.AsyncUpdateDB(db1, "Paste", db.ConvertString(key), db.ConvertString(text))
+	err := <-db.AsyncUpdateDB(db1, "Paste", key, text)
 	if err != nil {
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 		ctx.Write([]byte(fmt.Sprintf("Something went error: %v", err)))
@@ -148,7 +149,7 @@ func handleEditPaste(ctx *routing.Context) error {
 	}
 	db1 := db.InitDB("db/bolt.db")
 	defer db1.Close()
-	err := <-db.AsyncUpdateDB(db1, "Paste", key, db.ConvertString(text))
+	err := <-db.AsyncUpdateDB(db1, "Paste", db.ConvertByte(key), text)
 	if err != nil {
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 		ctx.Write([]byte("500 Status Internal Server Error"))
@@ -248,6 +249,7 @@ func main() {
 	router.Post("/<id>", handleEditPaste)
 	log.Println("Start server...")
 	log.Println("Listen tcp://localhost:8080")
+	runtime.GOMAXPROCS(runtime.NumCPU())
 	fasthttp.ListenAndServe("localhost:8080", router.HandleRequest)
 
 }
