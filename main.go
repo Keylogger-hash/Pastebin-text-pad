@@ -2,19 +2,16 @@ package main
 
 import (
 	"fmt"
-	"math/big"
 	"os"
 
 	"html/template"
 
-	"crypto/rand"
-	"regexp"
-
+	realip "github.com/Ferluci/fast-realip"
 	routing "github.com/qiangxue/fasthttp-routing"
+	log "github.com/sirupsen/logrus"
 	"github.com/valyala/fasthttp"
-
-	//"github.com/mailru/easyjson"
 	"textpad.com/db"
+	"textpad.com/utils"
 )
 
 type PasteBody struct {
@@ -23,31 +20,10 @@ type PasteBody struct {
 	CSRFToken string
 }
 
-const secret string = "_`53=Aj#3tvUg`x.^2s`kk?M:un37MW7&v>Hv#*{T(=DAyEXA<C@PMQ&i*m~V&:+&`"
-const letters = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-
-func Validate(urlPath string) bool {
-	ok, err := regexp.MatchString("^[a-zA-Z0-9]{8}$", urlPath)
-	if err != nil {
-		return false
-	} else {
-		return ok
-	}
-}
-func cryptoRandAndSecure(max int64) int64 {
-	nBig, err := rand.Int(rand.Reader, big.NewInt(int64(max)))
-	if err != nil {
-		fmt.Println("Can't convert")
-	}
-	return nBig.Int64()
-}
-func GenerateUID() []byte {
-	buf := make([]byte, 8)
-	for i := 0; i < len(buf); i++ {
-		nBig := cryptoRandAndSecure(int64(len(letters)))
-		buf[i] = letters[nBig]
-	}
-	return buf
+func init() {
+	log.SetFormatter(&log.JSONFormatter{})
+	log.SetOutput(os.Stdout)
+	log.SetLevel(log.InfoLevel)
 }
 
 // api handle
@@ -72,7 +48,7 @@ func handleIndex(ctx *routing.Context) error {
 
 	ctx.SetContentType("text/html")
 	tpl := template.Must(template.ParseFiles("public/templates/index.html"))
-	uid := GenerateUID()
+	uid := utils.GenerateUID()
 	cookie := fasthttp.Cookie{}
 	cookieStringValue := string(uid)
 	cookie.SetKey("csrftoken")
@@ -89,7 +65,7 @@ func handleIndex(ctx *routing.Context) error {
 
 func handlePaste(ctx *routing.Context) error {
 	key := ctx.Param("id")
-	ok := Validate(key)
+	ok := utils.Validate(key)
 	if !ok {
 		ctx.SetContentType("text/plain")
 		ctx.SetStatusCode(fasthttp.StatusNotAcceptable)
@@ -106,14 +82,14 @@ func handlePaste(ctx *routing.Context) error {
 		ctx.Write([]byte("404 Not found"))
 	} else {
 		ctx.SetContentType("text/html")
-		uid := GenerateUID()
+		uid := utils.GenerateUID()
 		uidString := db.ConvertString(uid)
 		cookie := fasthttp.Cookie{}
 		cookie.SetKey("csrftoken")
 		cookie.SetValue(uidString)
 		ctx.Response.Header.SetCookie(&cookie)
 		tpl := template.Must(template.ParseFiles("public/templates/paste.html"))
-		paste := &PasteBody{ID: key, Text: db.ConvertString(ans),CSRFToken: uidString}
+		paste := &PasteBody{ID: key, Text: db.ConvertString(ans), CSRFToken: uidString}
 		err := tpl.Execute(ctx, paste)
 		if err != nil {
 			ctx.Write([]byte("not found"))
@@ -140,7 +116,7 @@ func handlePastePost(ctx *routing.Context) error {
 
 	db1 := db.InitDB("db/bolt.db")
 	defer db1.Close()
-	key := GenerateUID()
+	key := utils.GenerateUID()
 	err := <-db.AsyncUpdateDB(db1, "Paste", db.ConvertString(key), db.ConvertString(text))
 	if err != nil {
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
@@ -158,14 +134,14 @@ func handleEditPaste(ctx *routing.Context) error {
 	text := ctx.FormValue("text")
 	csrftokenInputField := db.ConvertString(ctx.FormValue("csrftoken"))
 	csrftoken := db.ConvertString(ctx.Request.Header.Cookie("csrftoken"))
-	fmt.Println(csrftokenInputField==csrftoken)
+	fmt.Println(csrftokenInputField == csrftoken)
 	if text == nil {
 		ctx.SetStatusCode(fasthttp.StatusBadRequest)
 		ctx.Write([]byte("400 Bad request"))
 		return nil
 	}
-	
-	if csrftokenInputField != csrftoken  {
+
+	if csrftokenInputField != csrftoken {
 		ctx.SetStatusCode(fasthttp.StatusForbidden)
 		ctx.Write([]byte("403 CSRF forbidden"))
 		return nil
@@ -177,11 +153,11 @@ func handleEditPaste(ctx *routing.Context) error {
 		ctx.SetStatusCode(fasthttp.StatusInternalServerError)
 		ctx.Write([]byte("500 Status Internal Server Error"))
 	} else {
+
 		ctx.Redirect("/"+key, fasthttp.StatusOK)
 	}
 	return nil
 }
-
 
 func handleStaticCSS(ctx *routing.Context) error {
 	path := ctx.Param("path")
@@ -237,12 +213,31 @@ func handleStaticImages(ctx *routing.Context) error {
 	}
 	return nil
 }
+func logMiddleware(ctx *routing.Context) error {
+	method := string(ctx.Method())
+	ip := realip.FromRequest(ctx.RequestCtx)
+	status := ctx.RequestCtx.Response.StatusCode()
+	uri := string(ctx.Request.URI().RequestURI())
+	scheme := string(ctx.Request.URI().Scheme())
+	host := string(ctx.Request.Host())
+	ua := string(ctx.UserAgent())
+	log.WithFields(log.Fields{
+		"IP":         ip,
+		"Method":     fmt.Sprintf("%s %s %s", method, uri, scheme),
+		"Status":     status,
+		"Host":       fmt.Sprintf("%s://%s%s", scheme, host, uri),
+		"User-Agent": ua,
+	}).Info()
 
+	// fmt.Printf("%v -- %s %s://%s%s %s\n", method, t1,scheme, host, uri, ua)
+	// 47.29.201.179 - - [28/Feb/2019:13:17:10 +0000] "GET /?p=1 HTTP/2.0" 200 5316 "https://domain1.com/?p=1" "Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/72.0.3626.119 Safari/537.36" "2.75"
+	return nil
+}
 
 func main() {
 	router := routing.New()
 	static := router.Group("/static")
-
+	router.Use(logMiddleware)
 	static.Get("/css/<path>", handleStaticCSS)
 	static.Get("/js/<path>", handleStaticJS)
 	static.Get("/images/<path>", handleStaticImages)
@@ -251,8 +246,8 @@ func main() {
 	router.Get("/raw/<id>", apiAsyncHandlePasteGet)
 	router.Get("/<id>", handlePaste)
 	router.Post("/<id>", handleEditPaste)
-	fmt.Println("Start server...")
-	fmt.Println("Listen tcp://localhost:8080")
+	log.Println("Start server...")
+	log.Println("Listen tcp://localhost:8080")
 	fasthttp.ListenAndServe("localhost:8080", router.HandleRequest)
 
 }

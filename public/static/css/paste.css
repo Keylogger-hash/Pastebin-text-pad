@@ -15,7 +15,9 @@ button {
     margin-top: 20px;
 }
 #edit-hidden {
-    margin-left:77%;
+    margin-left:65%;
     margin-top:20px;
     font-size:20px;
+    width: 300px;
+    height:40px;
 }

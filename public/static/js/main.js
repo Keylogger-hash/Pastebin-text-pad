@@ -3,8 +3,7 @@ button.onclick = function(){
     var textarea = document.querySelector("textarea");
     document.getElementById("edit-hidden").type='submit';
     textarea.readOnly = false;
-    
-    
+    alert("Now you can edit paste!")    
 }
 function main(){
     var button = document.querySelector("button");
