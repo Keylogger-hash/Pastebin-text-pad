@@ -4,6 +4,7 @@ go 1.17
 
 require (
 	github.com/Ferluci/fast-realip v1.0.0
+	github.com/jessevdk/go-flags v1.5.0
 	github.com/qiangxue/fasthttp-routing v0.0.0-20160225050629-6ccdc2a18d87
 	github.com/sirupsen/logrus v1.8.1
 	github.com/valyala/fasthttp v1.34.0
